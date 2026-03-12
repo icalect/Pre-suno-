@@ -4,7 +4,7 @@ from bs4 import BeautifulSoup
 import time
 
 # --- CONFIGURATION ---
-# Your Discogs Token is now integrated
+# Your Discogs Token is integrated
 DISCOGS_TOKEN = "NhcAlMBiHPZCcJThCcjvzmTQcFWfTMDQDUzPGgQh"
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
@@ -40,7 +40,8 @@ def trace_samples(title, artist):
     query = f"{artist} {title}".replace(" ", "+")
     search_url = f"https://www.whosampled.com/search/it/?q={query}"
     
-samples_found = []
+    # FIXED INDENTATION BELOW
+    samples_found = []
     try:
         # Step 1: Search for the song
         res = requests.get(search_url, headers=HEADERS, timeout=10)
