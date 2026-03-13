@@ -1,6 +1,7 @@
 import streamlit as st
 from google import genai
 from google.genai import types
+import time
 
 # --- SECURE CONFIGURATION ---
 if "GEMINI_API_KEY" in st.secrets:
@@ -9,65 +10,67 @@ else:
     st.error("Missing API Key! Please add GEMINI_API_KEY to your Streamlit Secrets.")
     st.stop()
 
-# Initialize the new GenAI Client
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 def generate_suno_prompt(song, artist):
-    # Setup the Google Search Tool using the correct Gemini 2.0 syntax
-    search_tool = types.Tool(
-        google_search=types.GoogleSearch()
-    )
-    
-    config = types.GenerateContentConfig(
-        tools=[search_tool],
-        temperature=1.0  # Recommended for creative grounding
-    )
-
+    # Prompt for the AI
     prompt_text = f"""
-    Deep research on the song '{song}' by '{artist}'. 
-    1. Check WhoSampled.com for samples (identify genre and era of the sampled track).
-    2. Check Discogs.com for specific 'Style' and 'Genre' tags.
-    3. Identify the BPM and rhythmic feel.
-    4. Describe the vocal style and key instruments.
-
-    Generate a 'Suno AI Style Prompt'. 
-    Format: Return ONLY a comma-separated list of descriptive keywords.
-    Rules: No artist names, no song titles, focus on 'DNA' and textures.
+    Research the song '{song}' by '{artist}'. 
+    Identify its genres, sub-genres, BPM, key instruments, and any famous samples it uses.
+    Create a 'Suno AI Style Prompt' consisting ONLY of a comma-separated list of descriptive keywords.
+    Include textures like 'vintage soul' if it uses old samples. 
+    NO artist names, NO song titles.
     """
 
+    # Attempt 1: Gemini 1.5 Flash WITH Search (More stable for free tier)
     try:
-        # Generate content using the new SDK method
+        search_tool = types.Tool(google_search=types.GoogleSearch())
+        config_with_search = types.GenerateContentConfig(tools=[search_tool])
+        
         response = client.models.generate_content(
-            model='gemini-2.0-flash',
+            model='gemini-1.5-flash',
             contents=prompt_text,
-            config=config
+            config=config_with_search
         )
-        # Clean up output
-        return response.text.strip().replace("```", "").replace("text", "").strip()
+        return response.text.strip().replace("```", "").replace("text", ""), "Search Grounding"
+    
     except Exception as e:
-        return f"Error: {str(e)}"
+        # If 429 (Quota) or any other error, try Attempt 2: WITHOUT Search
+        if "429" in str(e) or "limit" in str(e).lower():
+            try:
+                # No search tool, just AI knowledge
+                response = client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=prompt_text
+                )
+                return response.text.strip().replace("```", "").replace("text", ""), "AI Knowledge (Search Quota Full)"
+            except Exception as e2:
+                return f"Error: {str(e2)}", "Failed"
+        else:
+            return f"Error: {str(e)}", "Failed"
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Suno DNA Architect", page_icon="🪄")
 st.title("🪄 Suno AI Prompt Architect")
-st.markdown("Grounding musical DNA via **Gemini 2.0** and Google Search.")
+st.markdown("Generates Suno style prompts using Gemini AI.")
 
-song_title = st.text_input("Song Title", placeholder="e.g. C.R.E.A.M.")
-artist_name = st.text_input("Artist", placeholder="e.g. Wu-Tang Clan")
+song_title = st.text_input("Song Title", placeholder="e.g. Bohemian Rhapsody")
+artist_name = st.text_input("Artist", placeholder="e.g. Queen")
 
 if st.button("Generate DNA Prompt", use_container_width=True):
     if song_title and artist_name:
-        with st.spinner("Analyzing samples and musical style..."):
-            result = generate_suno_prompt(song_title, artist_name)
+        with st.spinner("Analyzing song..."):
+            result, source = generate_suno_prompt(song_title, artist_name)
             
             if "Error" in result:
                 st.error(result)
             else:
                 st.subheader("🚀 Suno Style Box:")
                 st.code(result, language="text")
-                st.success("DNA extraction successful.")
+                st.caption(f"Data Source: {source}")
+                st.success("Analysis complete.")
     else:
-        st.error("Please enter both a song title and an artist.")
+        st.error("Please enter both song and artist.")
 
 st.divider()
-st.caption("Migrated to the 2026 Google GenAI SDK (v2.0).")
+st.caption("Free Tier users: If Search Grounding is busy, the app defaults to the AI's internal database.")
