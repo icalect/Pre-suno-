@@ -1,7 +1,5 @@
 import streamlit as st
-from google import genai
-from google.genai import types
-import time
+import google.generativeai as genai
 
 # --- SECURE CONFIGURATION ---
 if "GEMINI_API_KEY" in st.secrets:
@@ -10,67 +8,69 @@ else:
     st.error("Missing API Key! Please add GEMINI_API_KEY to your Streamlit Secrets.")
     st.stop()
 
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Use the stable configuration
+genai.configure(api_key=GEMINI_API_KEY)
 
 def generate_suno_prompt(song, artist):
-    # Prompt for the AI
+    # Using the most stable model ID
+    model = genai.GenerativeModel('gemini-1.5-flash')
+
+    # We use a sophisticated prompt so the AI acts like a musicologist
     prompt_text = f"""
-    Research the song '{song}' by '{artist}'. 
-    Identify its genres, sub-genres, BPM, key instruments, and any famous samples it uses.
-    Create a 'Suno AI Style Prompt' consisting ONLY of a comma-separated list of descriptive keywords.
-    Include textures like 'vintage soul' if it uses old samples. 
-    NO artist names, NO song titles.
+    You are a musicology expert and Suno AI prompt engineer.
+    Analyze the song '{song}' by '{artist}'.
+    
+    Tasks:
+    1. Identify the primary genres (e.g., East Coast Hip Hop, Synth-pop).
+    2. Identify the 'DNA' (What famous samples does it use? What era is the sound?).
+    3. Identify the technicals (BPM, specific instruments like 808s, Juno-60 synths, or Rhodes piano).
+    4. Identify the vocal style.
+
+    Output:
+    Provide a Suno AI 'Style of Music' prompt. 
+    It must be a single paragraph of comma-separated keywords.
+    Include the textures of any sampled music (e.g., if it samples 70s Soul, include '1970s soulful horns, vintage grit').
+    NO artist names. NO song titles.
     """
 
-    # Attempt 1: Gemini 1.5 Flash WITH Search (More stable for free tier)
     try:
-        search_tool = types.Tool(google_search=types.GoogleSearch())
-        config_with_search = types.GenerateContentConfig(tools=[search_tool])
-        
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt_text,
-            config=config_with_search
-        )
-        return response.text.strip().replace("```", "").replace("text", ""), "Search Grounding"
-    
+        response = model.generate_content(prompt_text)
+        # Clean the output to ensure it's just the keywords
+        clean_text = response.text.strip().replace("```", "").replace("text", "").strip()
+        return clean_text
     except Exception as e:
-        # If 429 (Quota) or any other error, try Attempt 2: WITHOUT Search
-        if "429" in str(e) or "limit" in str(e).lower():
-            try:
-                # No search tool, just AI knowledge
-                response = client.models.generate_content(
-                    model='gemini-1.5-flash',
-                    contents=prompt_text
-                )
-                return response.text.strip().replace("```", "").replace("text", ""), "AI Knowledge (Search Quota Full)"
-            except Exception as e2:
-                return f"Error: {str(e2)}", "Failed"
-        else:
-            return f"Error: {str(e)}", "Failed"
+        return f"Error: {str(e)}"
 
 # --- STREAMLIT UI ---
 st.set_page_config(page_title="Suno DNA Architect", page_icon="🪄")
 st.title("🪄 Suno AI Prompt Architect")
-st.markdown("Generates Suno style prompts using Gemini AI.")
+st.markdown("Instantly extract a song's musical DNA for Suno AI.")
 
-song_title = st.text_input("Song Title", placeholder="e.g. Bohemian Rhapsody")
-artist_name = st.text_input("Artist", placeholder="e.g. Queen")
+col1, col2 = st.columns(2)
+with col1:
+    song_title = st.text_input("Song Title", placeholder="e.g. C.R.E.A.M.")
+with col2:
+    artist_name = st.text_input("Artist", placeholder="e.g. Wu-Tang Clan")
 
 if st.button("Generate DNA Prompt", use_container_width=True):
     if song_title and artist_name:
-        with st.spinner("Analyzing song..."):
-            result, source = generate_suno_prompt(song_title, artist_name)
+        with st.spinner(f"Extracting DNA for {song_title}..."):
+            result = generate_suno_prompt(song_title, artist_name)
             
             if "Error" in result:
-                st.error(result)
+                st.error("API Connection Issue. Please check your API Key in Streamlit Secrets.")
+                st.info("Technical details: " + result)
             else:
                 st.subheader("🚀 Suno Style Box:")
                 st.code(result, language="text")
-                st.caption(f"Data Source: {source}")
-                st.success("Analysis complete.")
+                st.success("DNA Prompt Generated!")
+                
+                with st.expander("How to use this"):
+                    st.write("1. Open Suno AI.")
+                    st.write("2. Switch to **Custom Mode**.")
+                    st.write("3. Paste the code above into the **'Style of Music'** box.")
     else:
-        st.error("Please enter both song and artist.")
+        st.error("Please enter both a song title and an artist.")
 
 st.divider()
-st.caption("Free Tier users: If Search Grounding is busy, the app defaults to the AI's internal database.")
+st.caption("v3.0 - High Compatibility Mode (No-Search)")
